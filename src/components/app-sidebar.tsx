@@ -25,151 +25,50 @@ import {
 	SidebarHeader,
 	SidebarRail,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/AuthContext";
 
-// This is sample data.
-const data = {
-	user: {
-		name: "Admin",
-		email: "m@example.com",
-		avatar: "/avatars/shadcn.jpg",
-	},
-	teams: [
-		{
-			name: "Acme Inc",
-			logo: GalleryVerticalEnd,
-			plan: "Enterprise",
-		},
-		{
-			name: "Acme Corp.",
-			logo: AudioWaveform,
-			plan: "Startup",
-		},
-		{
-			name: "Evil Corp.",
-			logo: Command,
-			plan: "Free",
-		},
-	],
-	navMain: [
-		{
-			title: "Safe Map",
-			url: "/",
-			icon: SquareTerminal,
-			isActive: true,
-			items: [
-				{
-					title: "History",
-					url: "#",
-				},
-				{
-					title: "Starred",
-					url: "#",
-				},
-				{
-					title: "Settings",
-					url: "#",
-				},
-			],
-		},
-		{
-			title: "Models",
-			url: "#",
-			icon: Bot,
-			items: [
-				{
-					title: "Genesis",
-					url: "#",
-				},
-				{
-					title: "Explorer",
-					url: "#",
-				},
-				{
-					title: "Quantum",
-					url: "#",
-				},
-			],
-		},
-		{
-			title: "Documentation",
-			url: "#",
-			icon: BookOpen,
-			items: [
-				{
-					title: "Introduction",
-					url: "#",
-				},
-				{
-					title: "Get Started",
-					url: "#",
-				},
-				{
-					title: "Tutorials",
-					url: "#",
-				},
-				{
-					title: "Changelog",
-					url: "#",
-				},
-			],
-		},
-		{
-			title: "Settings",
-			url: "#",
-			icon: Settings2,
-			items: [
-				{
-					title: "General",
-					url: "#",
-				},
-				{
-					title: "Team",
-					url: "#",
-				},
-				{
-					title: "Billing",
-					url: "#",
-				},
-				{
-					title: "Limits",
-					url: "#",
-				},
-			],
-		},
-	],
-	projects: [
-		{
-			name: "Design Engineering",
-			url: "#",
-			icon: Frame,
-		},
-		{
-			name: "Sales & Marketing",
-			url: "#",
-			icon: PieChart,
-		},
-		{
-			name: "Travel",
-			url: "#",
-			icon: Map,
-		},
-	],
+const defaultUser = {
+  name: "Guest",
+  email: "guest@local",
+  avatar: "/avatars/shadcn.jpg",
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-	return (
-		<Sidebar collapsible="icon" {...props}>
-			<SidebarHeader>
-				<TeamSwitcher teams={data.teams} />
-			</SidebarHeader>
-			<SidebarContent>
-				<NavMain items={data.navMain} />
-				<NavProjects projects={data.projects} />
-			</SidebarContent>
-			<SidebarFooter>
-				<NavUser user={data.user} />
-			</SidebarFooter>
-			<SidebarRail />
-		</Sidebar>
-	);
+  const { user, isAdmin } = useAuth();
+
+  const navMain = [
+    {
+      title: "Dashboard",
+      url: "/dashboard",
+      icon: SquareTerminal,
+      isActive: true,
+      items: [
+        { title: "Map", url: "/dashboard/map" },
+        { title: "Alerts", url: "/dashboard/alerts" },
+        ...(isAdmin ? [{ title: "Create Alert", url: "/dashboard/alerts/create" }] : []),
+        ...(isAdmin ? [{ title: "Manage", url: "/dashboard/manage" }] : []),
+        ...(isAdmin ? [{ title: "Admin", url: "/dashboard/admin" }] : []),
+        { title: "Settings", url: "/dashboard/settings" },
+      ],
+    },
+  ];
+
+  const teams = [
+    { name: "SafeMap", logo: GalleryVerticalEnd, plan: isAdmin ? "Admin" : "User" },
+  ];
+
+  return (
+    <Sidebar collapsible="icon" {...props}>
+      <SidebarHeader>
+        <TeamSwitcher teams={teams} />
+      </SidebarHeader>
+      <SidebarContent>
+        <NavMain items={navMain} />
+      </SidebarContent>
+      <SidebarFooter>
+        <NavUser user={{ name: user?.displayName || user?.email || defaultUser.name, email: user?.email || defaultUser.email, avatar: defaultUser.avatar }} />
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
+  );
 }
