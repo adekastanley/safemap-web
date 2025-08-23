@@ -1,7 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
 // User roles
-export type UserRole = 'admin' | 'user' | 'guest';
+export type UserRole = 'superadmin' | 'admin' | 'user' | 'guest';
 
 // Alert categories with colors
 export enum AlertCategory {

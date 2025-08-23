@@ -24,7 +24,9 @@ interface AuthContextType {
 	) => Promise<void>;
 	logout: () => Promise<void>;
 	isAdmin: boolean;
+	isSuperAdmin: boolean;
 	isAuthenticated: boolean;
+	canManageUsers: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -57,9 +59,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 					const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
 					const userData = userDoc.data();
 
-					// Determine role
+					// Determine role with superadmin support
 					let role: UserRole = "user";
-					if (customClaims.admin || userData?.role === "admin") {
+					if (userData?.role === "superadmin") {
+						// Superadmin role can only be set in Firestore, not via custom claims
+						role = "superadmin";
+					} else if (customClaims.admin || userData?.role === "admin") {
 						role = "admin";
 					} else if (userData?.role) {
 						role = userData.role;
@@ -144,7 +149,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 		}
 	};
 
-	const isAdmin = user?.role === "admin";
+	const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+	const isSuperAdmin = user?.role === "superadmin";
+	const canManageUsers = user?.role === "admin" || user?.role === "superadmin";
 	const isAuthenticated = !!user;
 
 	const value: AuthContextType = {
@@ -154,7 +161,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 		signUp,
 		logout,
 		isAdmin,
+		isSuperAdmin,
 		isAuthenticated,
+		canManageUsers,
 	};
 
 	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

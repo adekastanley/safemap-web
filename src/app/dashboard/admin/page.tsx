@@ -18,7 +18,7 @@ interface FirestoreUser {
 }
 
 export default function AdminPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isSuperAdmin } = useAuth();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [users, setUsers] = useState<FirestoreUser[]>([]);
@@ -70,6 +70,11 @@ export default function AdminPage() {
   };
 
   const promoteToAdmin = async (userId: string) => {
+    if (!isSuperAdmin) {
+      setMessage('❌ Only super admins can promote users to admin');
+      return;
+    }
+
     try {
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
@@ -81,6 +86,31 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Error promoting user:', error);
       setMessage('❌ Error promoting user to admin');
+    }
+  };
+
+  const demoteFromAdmin = async (userId: string) => {
+    if (!isSuperAdmin) {
+      setMessage('❌ Only super admins can demote admin users');
+      return;
+    }
+
+    if (userId === user?.uid) {
+      setMessage('❌ You cannot demote yourself');
+      return;
+    }
+
+    try {
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        role: 'user',
+        updatedAt: new Date().toISOString()
+      });
+      setMessage('✅ User demoted from admin successfully!');
+      await loadUsers(); // Reload the user list
+    } catch (error) {
+      console.error('Error demoting user:', error);
+      setMessage('❌ Error demoting user from admin');
     }
   };
 
@@ -104,19 +134,41 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Admin Management</h1>
+        <p className="text-muted-foreground">
+          {isSuperAdmin ? 'Manage user roles and system administration' : 'View system information and sync users'}
+        </p>
+      </div>
+
+      {/* User Role Badge */}
+      <div className="flex items-center gap-2">
+        <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+          user?.role === 'superadmin' 
+            ? 'bg-purple-100 text-purple-800' 
+            : user?.role === 'admin'
+            ? 'bg-blue-100 text-blue-800'
+            : 'bg-gray-100 text-gray-800'
+        }`}>
+          {user?.role === 'superadmin' ? '👑 Super Admin' : 
+           user?.role === 'admin' ? '🛡️ Admin' : '👤 User'}
+        </div>
+      </div>
+
+      {/* User Sync Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Admin Utilities</CardTitle>
+          <CardTitle>User Synchronization</CardTitle>
           <CardDescription>
-            Manage user roles and sync Firebase Auth users to Firestore
+            Sync Firebase Auth users to Firestore with default roles
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold mb-2">User Sync</h3>
             <p className="text-sm text-gray-600 mb-4">
-              This will copy all Firebase Auth users to Firestore with default &apos;user&apos; role.
+              This will copy all Firebase Auth users to Firestore with default 'user' role.
               Existing users will be skipped.
             </p>
             <Button 
@@ -133,17 +185,123 @@ export default function AdminPage() {
               {message}
             </div>
           )}
+        </CardContent>
+      </Card>
 
-          <div className="mt-6 p-4 bg-blue-50 rounded-md">
-            <h4 className="font-semibold text-blue-800">Instructions:</h4>
-            <ol className="list-decimal list-inside mt-2 text-sm text-blue-700 space-y-1">
-              <li>First, sync all users to create Firestore documents</li>
-              <li>Go to Firebase Console → Firestore Database</li>
-              <li>Find the &apos;users&apos; collection</li>
-              <li>Edit any user document and change their &apos;role&apos; field from &apos;user&apos; to &apos;admin&apos;</li>
-              <li>Save the changes</li>
-              <li>The user will now have admin access and see admin menu items</li>
-            </ol>
+      {/* User Management Card - Only for SuperAdmin */}
+      {isSuperAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>User Role Management</CardTitle>
+            <CardDescription>
+              Manage user roles and permissions (Super Admin only)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingUsers ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {users.map((userData) => (
+                  <div key={userData.uid} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="font-medium">{userData.displayName || 'No name'}</div>
+                      <div className="text-sm text-gray-600">{userData.email}</div>
+                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                        userData.role === 'superadmin' 
+                          ? 'bg-purple-100 text-purple-800' 
+                          : userData.role === 'admin'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {userData.role === 'superadmin' ? 'Super Admin' : 
+                         userData.role === 'admin' ? 'Admin' : 'User'}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {userData.role === 'user' && (
+                        <Button
+                          size="sm"
+                          onClick={() => promoteToAdmin(userData.uid)}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          Promote to Admin
+                        </Button>
+                      )}
+                      {userData.role === 'admin' && userData.uid !== user?.uid && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => demoteFromAdmin(userData.uid)}
+                        >
+                          Demote to User
+                        </Button>
+                      )}
+                      {userData.role === 'superadmin' && (
+                        <div className="text-xs text-purple-600 font-medium px-3 py-2">
+                          Cannot modify
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Role System Information */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Role System Information</CardTitle>
+          <CardDescription>
+            Understanding the user role hierarchy
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="p-4 border rounded-lg">
+                <div className="font-semibold text-purple-800 mb-2">👑 Super Admin</div>
+                <div className="text-sm text-gray-600">
+                  • Full system access<br/>
+                  • Can promote/demote admins<br/>
+                  • Manually assigned only<br/>
+                  • Cannot be changed via UI
+                </div>
+              </div>
+              <div className="p-4 border rounded-lg">
+                <div className="font-semibold text-blue-800 mb-2">🛡️ Admin</div>
+                <div className="text-sm text-gray-600">
+                  • Manage alerts and users<br/>
+                  • Send SMS notifications<br/>
+                  • Access admin features<br/>
+                  • Promoted by Super Admin
+                </div>
+              </div>
+              <div className="p-4 border rounded-lg">
+                <div className="font-semibold text-gray-800 mb-2">👤 User</div>
+                <div className="text-sm text-gray-600">
+                  • View map and alerts<br/>
+                  • Basic app functionality<br/>
+                  • Default role for new users<br/>
+                  • Cannot access admin features
+                </div>
+              </div>
+            </div>
+            
+            {!isSuperAdmin && (
+              <div className="mt-6 p-4 bg-amber-50 rounded-md">
+                <h4 className="font-semibold text-amber-800">Note for Admins:</h4>
+                <p className="mt-2 text-sm text-amber-700">
+                  To assign the first Super Admin role, manually edit the 'users' collection in Firebase Console 
+                  and change a user's 'role' field from 'admin' to 'superadmin'. Super Admins can then promote other users to admin through this interface.
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

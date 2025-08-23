@@ -108,20 +108,59 @@ export default function SafeMapComponent({
 
       googleMapRef.current = map;
 
-      // Try to center on current location (browser geolocation)
+      // Try to center on current location (browser geolocation) with better error handling
       if (navigator.geolocation) {
+        const timeoutId = setTimeout(() => {
+          console.log('Geolocation timeout - using default location');
+        }, 6000);
+
         navigator.geolocation.getCurrentPosition(
           (pos) => {
+            clearTimeout(timeoutId);
             const { latitude, longitude } = pos.coords;
             const newCenter = { lat: latitude, lng: longitude };
             map.setCenter(newCenter);
-            map.setZoom(14);
+            map.setZoom(15); // Slightly closer zoom for user location
+            
+            // Add a marker for user's current location
+            new google.maps.Marker({
+              position: newCenter,
+              map: map,
+              title: "Your Location",
+              icon: {
+                url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+                  <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="8" fill="#4285F4" stroke="white" stroke-width="3"/>
+                    <circle cx="12" cy="12" r="3" fill="white"/>
+                  </svg>
+                `)}`,
+                scaledSize: new google.maps.Size(24, 24),
+                anchor: new google.maps.Point(12, 12),
+              },
+            });
+            console.log('Map centered on user location:', { latitude, longitude });
           },
-          () => {
-            // ignore errors; keep default center
+          (error) => {
+            clearTimeout(timeoutId);
+            console.log('Geolocation error:', error.message);
+            console.log('Using default location (Lagos, Nigeria)');
+            // Show a notification to user about location access
+            if (error.code === error.PERMISSION_DENIED) {
+              console.log('Location access denied by user. To show your location, please allow location access in your browser.');
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+              console.log('Location information unavailable. Using default location.');
+            } else if (error.code === error.TIMEOUT) {
+              console.log('Location request timed out. Using default location.');
+            }
           },
-          { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
+          { 
+            enableHighAccuracy: true, 
+            timeout: 8000, 
+            maximumAge: 300000 // Cache location for 5 minutes
+          }
         );
+      } else {
+        console.log('Geolocation is not supported by this browser. Using default location.');
       }
 
       // Add click listener if onMapClick is provided
