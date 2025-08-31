@@ -8,7 +8,7 @@ import {
 	onAuthStateChanged,
 	updateProfile,
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { AuthUser, UserRole } from "@/types";
 
@@ -48,26 +48,74 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
+		console.log('AuthContext: Setting up onAuthStateChanged listener');
 		const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-			if (firebaseUser) {
-				try {
-					// Get custom claims
+			console.log('AuthContext: onAuthStateChanged triggered with:', firebaseUser ? { uid: firebaseUser.uid, email: firebaseUser.email } : 'null');
+
+			try {
+				if (firebaseUser) {
+					// Determine superadmin at runtime via env email BEFORE any Firestore access
+					const superEmail = process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL?.toLowerCase();
+					const emailLower = firebaseUser.email?.toLowerCase() || null;
+					const baseRole: UserRole = superEmail && emailLower && emailLower === superEmail ? 'superadmin' : 'user';
+					
+					// Set a base user immediately to avoid redirect bounce
+					const baseUser: AuthUser = {
+						uid: firebaseUser.uid,
+						email: firebaseUser.email,
+						displayName: firebaseUser.displayName,
+						role: baseRole,
+						customClaims: {
+							admin: false,
+							permissions: [],
+						},
+					};
+					console.log('AuthContext: Setting base user state:', baseUser);
+					setUser(baseUser);
+
+					console.log('AuthContext: Getting user tokens and Firestore data...');
+					// Get custom claims (not used for roles in MVP but logged for visibility)
 					const tokenResult = await firebaseUser.getIdTokenResult();
 					const customClaims = tokenResult.claims;
 
-					// Get user document from Firestore
-					const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-					const userData = userDoc.data();
+					// Canonical role doc: users/{uid}
+					const uid = firebaseUser.uid;
+					let userData: any | undefined;
+					const userRef = doc(db, 'users', uid);
+					const userSnap = await getDoc(userRef);
+					if (userSnap.exists()) {
+						userData = userSnap.data();
+					} else {
+						// Create default user doc
+						const newUser = {
+							uid,
+							email: firebaseUser.email || null,
+							displayName: firebaseUser.displayName || null,
+							role: 'user' as UserRole,
+							createdAt: new Date().toISOString(),
+							updatedAt: new Date().toISOString(),
+						};
+						await setDoc(userRef, newUser);
+						userData = newUser;
+					}
 
-					// Determine role with superadmin support
-					let role: UserRole = "user";
-					if (userData?.role === "superadmin") {
-						// Superadmin role can only be set in Firestore, not via custom claims
-						role = "superadmin";
-					} else if (customClaims.admin || userData?.role === "admin") {
-						role = "admin";
-					} else if (userData?.role) {
-						role = userData.role;
+					let role: UserRole = (userData?.role as UserRole) || 'user';
+
+					// Enforce single superadmin by env email
+					if (process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL && emailLower && emailLower === process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL.toLowerCase()) {
+						if (userData?.role !== 'superadmin') {
+							try {
+								await updateDoc(userRef, { role: 'superadmin', updatedAt: new Date().toISOString() });
+								role = 'superadmin';
+							} catch (e) {
+								role = 'superadmin'; // assume for UI even if write fails
+							}
+						} else {
+							role = 'superadmin';
+						}
+					} else if (role === 'superadmin') {
+						// If some other doc claims superadmin, normalize to admin at runtime
+						role = 'admin';
 					}
 
 					const authUser: AuthUser = {
@@ -76,20 +124,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 						displayName: firebaseUser.displayName,
 						role,
 						customClaims: {
-							admin: Boolean(customClaims.admin),
-							permissions: (customClaims.permissions as string[]) || [],
+							admin: Boolean(customClaims?.admin),
+							permissions: (customClaims?.permissions as string[]) || [],
 						},
 					};
 
+					console.log('AuthContext: Setting user from Firestore doc:', authUser);
 					setUser(authUser);
-				} catch (error) {
-					console.error("Error setting up user:", error);
+				} else {
+					console.log('AuthContext: No user, setting user to null');
 					setUser(null);
 				}
-			} else {
-				setUser(null);
+			} catch (error) {
+				// Do not clear the user on errors during claims/Firestore fetch - keep base user
+				console.error("AuthContext: Error setting up user (keeping base user if present):", error);
+			} finally {
+				console.log('AuthContext: Setting loading to false');
+				setLoading(false);
 			}
-			setLoading(false);
 		});
 
 		return unsubscribe;
@@ -97,8 +149,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
 	const signIn = async (email: string, password: string) => {
 		try {
-			await signInWithEmailAndPassword(auth, email, password);
+			console.log('AuthContext: signIn called with email:', email);
+			console.log('AuthContext: Firebase auth object:', auth);
+			const result = await signInWithEmailAndPassword(auth, email, password);
+			console.log('AuthContext: signInWithEmailAndPassword successful:', result.user.uid);
+			return result;
 		} catch (error) {
+			console.error('AuthContext: signInWithEmailAndPassword failed:', error);
 			const errorMessage =
 				error instanceof Error ? error.message : "Failed to sign in";
 			throw new Error(errorMessage);

@@ -13,6 +13,14 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+// Check if Firebase is properly configured
+console.log('Firebase Configuration Check:', {
+  hasApiKey: !!firebaseConfig.apiKey,
+  hasAuthDomain: !!firebaseConfig.authDomain,
+  hasProjectId: !!firebaseConfig.projectId,
+  projectId: firebaseConfig.projectId
+});
+
 // Initialize Firebase
 let app: FirebaseApp;
 if (getApps().length === 0) {

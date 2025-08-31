@@ -62,27 +62,42 @@ export async function createAlert(params: {
 }
 
 export function listenToAllAlerts(cb: (alerts: AlertDoc[]) => void): () => void {
-  return onSnapshot(query(collection(db, ALERTS), orderBy('createdAt', 'desc')), (snap) => {
-    const now = Timestamp.now();
-    const items: AlertDoc[] = snap.docs
-      .map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<AlertDoc, 'id'>),
-      }))
-      .filter((alert) => !alert.expiresAt || alert.expiresAt > now);
-    cb(items);
-  });
+  return onSnapshot(
+    query(collection(db, ALERTS), orderBy('createdAt', 'desc')),
+    (snap) => {
+      const now = Timestamp.now();
+      const items: AlertDoc[] = snap.docs
+        .map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<AlertDoc, 'id'>),
+        }))
+        .filter((alert) => !alert.expiresAt || alert.expiresAt > now);
+      cb(items);
+    },
+    (error) => {
+      console.error('listenToAllAlerts error:', error);
+      // On permission errors or other issues, still notify caller to stop spinners
+      cb([]);
+    }
+  );
 }
 
 export function listenToAlertHistory(cb: (alerts: AlertDoc[]) => void): () => void {
   const q = query(collection(db, ALERTS), orderBy('createdAt', 'desc'));
-  return onSnapshot(q, (snap) => {
-    const items: AlertDoc[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<AlertDoc, 'id'>),
-    }));
-    cb(items);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const items: AlertDoc[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<AlertDoc, 'id'>),
+      }));
+      cb(items);
+    },
+    (error) => {
+      console.error('listenToAlertHistory error:', error);
+      cb([]);
+    }
+  );
 }
 
 export async function getUserAlerts(userId: string): Promise<AlertDoc[]> {

@@ -21,16 +21,22 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Login attempt started with:', { email, password: password ? '[PROVIDED]' : '[EMPTY]' });
     setError('');
     setLoading(true);
 
     try {
+      console.log('Calling signIn function...');
       await signIn(email, password);
+      console.log('Sign in successful, redirecting to dashboard');
       router.push('/dashboard');
     } catch (err) {
+      console.error('Login error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign in';
+      console.log('Setting error message:', errorMessage);
       setError(errorMessage);
     } finally {
+      console.log('Login attempt finished, setting loading to false');
       setLoading(false);
     }
   };

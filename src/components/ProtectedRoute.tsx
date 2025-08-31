@@ -20,16 +20,27 @@ export default function ProtectedRoute({
   const router = useRouter();
 
   useEffect(() => {
+    console.log('ProtectedRoute: Auth state check:', { 
+      loading, 
+      isAuthenticated, 
+      isAdmin, 
+      user: user ? { uid: user.uid, email: user.email, role: user.role } : null 
+    });
+    
     if (!loading) {
       if (!isAuthenticated) {
+        console.log('ProtectedRoute: User not authenticated, redirecting to login');
         router.push(redirectTo);
         return;
       }
 
       if (requireAdmin && !isAdmin) {
+        console.log('ProtectedRoute: User not admin, redirecting to dashboard');
         router.push('/dashboard'); // Redirect non-admin users to regular dashboard
         return;
       }
+      
+      console.log('ProtectedRoute: Access granted');
     }
   }, [user, loading, isAuthenticated, isAdmin, requireAdmin, router, redirectTo]);
 

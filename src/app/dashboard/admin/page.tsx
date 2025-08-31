@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -76,16 +77,24 @@ export default function AdminPage() {
     }
 
     try {
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        role: 'admin',
-        updatedAt: new Date().toISOString()
+      const token = await (await import('firebase/auth')).getAuth().currentUser?.getIdToken();
+      const res = await fetch('/api/admin/role', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetUid: userId, role: 'admin' })
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to promote');
+      }
       setMessage('✅ User promoted to admin successfully!');
-      await loadUsers(); // Reload the user list
-    } catch (error) {
+      await loadUsers();
+    } catch (error: any) {
       console.error('Error promoting user:', error);
-      setMessage('❌ Error promoting user to admin');
+      setMessage(`❌ Error promoting user to admin: ${error.message || ''}`);
     }
   };
 
@@ -101,16 +110,24 @@ export default function AdminPage() {
     }
 
     try {
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        role: 'user',
-        updatedAt: new Date().toISOString()
+      const token = await (await import('firebase/auth')).getAuth().currentUser?.getIdToken();
+      const res = await fetch('/api/admin/role', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetUid: userId, role: 'user' })
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to demote');
+      }
       setMessage('✅ User demoted from admin successfully!');
-      await loadUsers(); // Reload the user list
-    } catch (error) {
+      await loadUsers();
+    } catch (error: any) {
       console.error('Error demoting user:', error);
-      setMessage('❌ Error demoting user from admin');
+      setMessage(`❌ Error demoting user from admin: ${error.message || ''}`);
     }
   };
 
@@ -118,22 +135,8 @@ export default function AdminPage() {
     loadUsers();
   }, []);
 
-  if (!isAdmin) {
-    return (
-      <div className="container mx-auto p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Access Denied</CardTitle>
-            <CardDescription>
-              Only administrators can access this page.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
-
   return (
+    <ProtectedRoute requireAdmin>
     <div className="space-y-6">
       {/* Header */}
       <div>
@@ -306,5 +309,6 @@ export default function AdminPage() {
         </CardContent>
       </Card>
     </div>
+    </ProtectedRoute>
   );
 }

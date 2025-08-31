@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function isSelf(uid) { return isSignedIn() && request.auth.uid == uid; }
+    // Single superadmin by email (hard-coded)
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.email == 'adekastanley1@gmail.com';
+    }
+    function isAdminByRole() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superadmin'];
+    }
+
+    // Users collection (role source of truth)
+    match /users/{uid} {
+      // Read: user can read their doc; superadmin can read all
+      allow read: if isSelf(uid) || isSuperAdmin();
+
+      // Create: user can create their own doc on first sign-in
+      allow create: if isSelf(uid);
+
+      // Update:
+      // - user can update their own doc EXCEPT elevating to superadmin
+      // - superadmin can update any user doc (but not set another superadmin)
+      allow update: if
+        (
+          isSelf(uid) && (
+            // Block self-escalation to superadmin
+            !(request.resource.data.role == 'superadmin' && resource.data.role != 'superadmin')
+          )
+        )
+        || (
+          isSuperAdmin() && (
+            // Superadmin may update any user doc but cannot set another superadmin
+            request.resource.data.role != 'superadmin'
+          )
+        );
+
+      // Delete: only superadmin may delete user docs
+      allow delete: if isSuperAdmin();
+    }
+
+    // Alerts collection
+    match /alerts/{docId} {
+      // Public read
+      allow read: if true;
+      // Create/Update/Delete only for admin or superadmin
+      allow create, update, delete: if isAdminByRole() || isSuperAdmin();
+    }
+
+    // Registered phone numbers
+    match /registered_users/{docId} {
+      // Admins/superadmin can manage
+      allow read, create, update, delete: if isAdminByRole() || isSuperAdmin();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

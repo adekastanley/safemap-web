@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import { MessageSquare, Send, Users, Phone, AlertCircle, CheckCircle2 } from 'lu
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { listenToMyRegisteredPhones, RegisteredPhone } from '@/lib/phoneRegistry';
+import { auth } from '@/lib/firebase';
 
 export default function NotificationsPage() {
   const { user, isAdmin } = useAuth();
@@ -77,15 +79,39 @@ export default function NotificationsPage() {
         return;
       }
 
-      // Here you would integrate with your SMS service (e.g., Twilio)
-      // For now, we'll just simulate the sending
-      console.log('Sending SMS to:', recipientNumbers.map(num => num.phoneNumber));
-      console.log('Message:', message);
+      // Get auth token
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        toast.error('Authentication token unavailable');
+        setSending(false);
+        return;
+      }
+      
+      // Send SMS via API
+      const response = await fetch('/api/sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          phoneNumbers: recipientNumbers.map(num => num.phoneNumber),
+          message: message,
+        }),
+      });
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const result = await response.json();
 
-      toast.success(`Message sent to ${recipientNumbers.length} recipient(s)!`);
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send messages');
+      }
+
+      if (result.failed > 0) {
+        toast.warning(`Sent ${result.sent} messages, ${result.failed} failed`);
+      } else {
+        toast.success(`Message sent to ${result.sent} recipient(s)!`);
+      }
+      
       setMessage('');
       setSelectedNumbers([]);
       setRecipient('all');
@@ -98,21 +124,9 @@ export default function NotificationsPage() {
     }
   };
 
-  if (!isAdmin) {
-    return (
-      <div className="space-y-6">
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            You need admin privileges to access SMS notifications.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
+    <ProtectedRoute requireAdmin>
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -334,6 +348,7 @@ export default function NotificationsPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

@@ -47,6 +47,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         { title: "Alerts", url: "/dashboard/alerts" },
         ...(isAdmin ? [{ title: "Create Alert", url: "/dashboard/alerts/create" }] : []),
         ...(isAdmin ? [{ title: "Manage", url: "/dashboard/manage" }] : []),
+        ...(isAdmin ? [{ title: "Notifications", url: "/dashboard/notifications" }] : []),
         ...(isAdmin ? [{ title: "Admin", url: "/dashboard/admin" }] : []),
         { title: "Settings", url: "/dashboard/settings" },
       ],

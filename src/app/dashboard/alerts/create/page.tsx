@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
 import GoogleMapsProvider from '@/components/GoogleMapsProvider';
 import SafeMapComponent from '@/components/SafeMapComponent';
@@ -65,12 +66,6 @@ export default function CreateAlertPage() {
     }
   }, [searchParams]);
 
-  // Redirect non-admin users
-  useEffect(() => {
-    if (!isAdmin) {
-      router.push('/dashboard');
-    }
-  }, [isAdmin, router]);
 
   const handleMapClick = (location: Location) => {
     setSelectedLocation(location);
@@ -113,10 +108,6 @@ export default function CreateAlertPage() {
     }
   };
 
-  if (!isAdmin) {
-    return null; // Will redirect in useEffect
-  }
-
   if (success) {
     return (
       <div className="flex items-center justify-center min-h-96">
@@ -141,6 +132,7 @@ export default function CreateAlertPage() {
   }
 
   return (
+    <ProtectedRoute requireAdmin>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
@@ -285,5 +277,6 @@ export default function CreateAlertPage() {
         </Card>
       </div>
     </div>
+    </ProtectedRoute>
   );
 }
