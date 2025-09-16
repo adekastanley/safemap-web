@@ -28,48 +28,64 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 
 const defaultUser = {
-  name: "Guest",
-  email: "guest@local",
-  avatar: "/avatars/shadcn.jpg",
+	name: "Guest",
+	email: "guest@local",
+	avatar: "/avatars/shadcn.jpg",
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { user, isAdmin } = useAuth();
+	const { user, isAdmin, isSuperAdmin } = useAuth();
 
-  const navMain = [
-    {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: SquareTerminal,
-      isActive: true,
-      items: [
-        { title: "Map", url: "/dashboard/map" },
-        { title: "Alerts", url: "/dashboard/alerts" },
-        ...(isAdmin ? [{ title: "Create Alert", url: "/dashboard/alerts/create" }] : []),
-        ...(isAdmin ? [{ title: "Manage", url: "/dashboard/manage" }] : []),
-        ...(isAdmin ? [{ title: "Notifications", url: "/dashboard/notifications" }] : []),
-        ...(isAdmin ? [{ title: "Admin", url: "/dashboard/admin" }] : []),
-        { title: "Settings", url: "/dashboard/settings" },
-      ],
-    },
-  ];
+	const navMain = [
+		{
+			title: "Dashboard",
+			url: "/dashboard",
+			icon: SquareTerminal,
+			isActive: true,
+			items: [
+				{ title: "Map", url: "/dashboard/map" },
+				{ title: "Alerts", url: "/dashboard/alerts" },
+				...(isAdmin
+					? [{ title: "Create Alert", url: "/dashboard/alerts/create" }]
+					: []),
+				...(isAdmin ? [{ title: "Manage", url: "/dashboard/manage" }] : []),
+				...(isAdmin
+					? [{ title: "Notifications", url: "/dashboard/notifications" }]
+					: []),
+				...(isSuperAdmin
+					? [{ title: "Admin", url: "/dashboard/admin" }]
+					: []),
+				{ title: "Settings", url: "/dashboard/settings" },
+			],
+		},
+	];
 
-  const teams = [
-    { name: "SafeMap", logo: GalleryVerticalEnd, plan: isAdmin ? "Admin" : "User" },
-  ];
+	const teams = [
+		{
+			name: "SafeMap",
+			logo: GalleryVerticalEnd,
+			plan: isSuperAdmin ? "Super Admin" : isAdmin ? "Admin" : "User",
+		},
+	];
 
-  return (
-    <Sidebar {...props}>
-      <SidebarHeader>
-        <TeamSwitcher teams={teams} />
-      </SidebarHeader>
-      <SidebarContent>
-        <NavMain items={navMain} />
-      </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={{ name: user?.displayName || user?.email || defaultUser.name, email: user?.email || defaultUser.email, avatar: defaultUser.avatar }} />
-      </SidebarFooter>
-      <SidebarRail />
-    </Sidebar>
-  );
+	return (
+		<Sidebar {...props}>
+			<SidebarHeader>
+				<TeamSwitcher teams={teams} />
+			</SidebarHeader>
+			<SidebarContent>
+				<NavMain items={navMain} />
+			</SidebarContent>
+			<SidebarFooter>
+				<NavUser
+					user={{
+						name: user?.displayName || user?.email || defaultUser.name,
+						email: user?.email || defaultUser.email,
+						avatar: defaultUser.avatar,
+					}}
+				/>
+			</SidebarFooter>
+			<SidebarRail />
+		</Sidebar>
+	);
 }

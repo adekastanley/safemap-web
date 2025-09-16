@@ -18,12 +18,58 @@ interface FirestoreUser {
   role: string;
 }
 
+function classNames(...s: string[]) { return s.filter(Boolean).join(' '); }
+
+function UserStatusRegionsRow({ uid, currentRole, onUpdated }: { uid: string; currentRole: string; onUpdated: () => Promise<void> | void }) {
+  const [status, setStatus] = useState<'active'|'blocked'|'banned'>('active');
+  const [regions, setRegions] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+
+  const update = async () => {
+    setLoading(true);
+    try {
+      const token = await (await import('firebase/auth')).getAuth().currentUser?.getIdToken();
+      const res = await fetch('/api/admin/user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ targetUid: uid, updates: { status, assignedRegions: regions.split(',').map(s=>s.trim()).filter(Boolean) } })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(()=>({}));
+        throw new Error(data.error || 'Failed to update user');
+      }
+      await onUpdated();
+    } catch (e) {
+      console.error('Update user failed', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-3 items-center">
+        <label className="text-sm text-gray-600">Status</label>
+        <select value={status} onChange={e=>setStatus(e.target.value as any)} className="border rounded px-2 py-1 text-sm">
+          <option value="active">Active</option>
+          <option value="blocked">Blocked</option>
+          <option value="banned">Banned</option>
+        </select>
+        <label className="text-sm text-gray-600">Assigned Regions (comma-separated)</label>
+        <input value={regions} onChange={e=>setRegions(e.target.value)} placeholder="e.g., Lagos Mainland, Ikeja" className="border rounded px-2 py-1 text-sm flex-1" />
+        <Button size="sm" variant="outline" onClick={update} disabled={loading}>{loading? 'Saving...' : 'Save'}</Button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user, isAdmin, isSuperAdmin } = useAuth();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [users, setUsers] = useState<FirestoreUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [updating, setUpdating] = useState<string | null>(null);
 
   const loadUsers = async () => {
     setLoadingUsers(true);
@@ -160,7 +206,8 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* User Sync Card */}
+      {/* User Sync Card - Only for SuperAdmin */}
+      {isSuperAdmin && (
       <Card>
         <CardHeader>
           <CardTitle>User Synchronization</CardTitle>
@@ -190,14 +237,15 @@ export default function AdminPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* User Management Card - Only for SuperAdmin */}
       {isSuperAdmin && (
         <Card>
           <CardHeader>
-            <CardTitle>User Role Management</CardTitle>
+            <CardTitle>User Management</CardTitle>
             <CardDescription>
-              Manage user roles and permissions (Super Admin only)
+              View and manage users (roles, status, assigned regions)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -207,47 +255,43 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {users.map((userData) => (
-                  <div key={userData.uid} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="font-medium">{userData.displayName || 'No name'}</div>
-                      <div className="text-sm text-gray-600">{userData.email}</div>
-                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mt-1 ${
-                        userData.role === 'superadmin' 
+                {users.map((u) => (
+                  <div key={u.uid} className="p-4 border rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{u.displayName || 'No name'}</div>
+                        <div className="text-sm text-gray-600">{u.email || 'No email'}</div>
+                      </div>
+                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        u.role === 'superadmin' 
                           ? 'bg-purple-100 text-purple-800' 
-                          : userData.role === 'admin'
+                          : u.role === 'admin'
                           ? 'bg-blue-100 text-blue-800'
                           : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {userData.role === 'superadmin' ? 'Super Admin' : 
-                         userData.role === 'admin' ? 'Admin' : 'User'}
+                        {u.role === 'superadmin' ? 'Super Admin' : u.role === 'admin' ? 'Admin' : 'User'}
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      {userData.role === 'user' && (
-                        <Button
-                          size="sm"
-                          onClick={() => promoteToAdmin(userData.uid)}
-                          className="bg-blue-600 hover:bg-blue-700"
-                        >
-                          Promote to Admin
+
+                    {/* Actions */}
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {u.role === 'user' && (
+                        <Button size="sm" onClick={() => promoteToAdmin(u.uid)} disabled={updating===u.uid}>
+                          {updating===u.uid? 'Updating...' : 'Promote to Admin'}
                         </Button>
                       )}
-                      {userData.role === 'admin' && userData.uid !== user?.uid && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => demoteFromAdmin(userData.uid)}
-                        >
-                          Demote to User
+                      {u.role === 'admin' && u.uid !== user?.uid && (
+                        <Button size="sm" variant="outline" onClick={() => demoteFromAdmin(u.uid)} disabled={updating===u.uid}>
+                          {updating===u.uid? 'Updating...' : 'Demote to User'}
                         </Button>
                       )}
-                      {userData.role === 'superadmin' && (
-                        <div className="text-xs text-purple-600 font-medium px-3 py-2">
-                          Cannot modify
-                        </div>
+                      {u.role === 'superadmin' && (
+                        <span className="text-xs text-purple-600">Cannot modify superadmin role</span>
                       )}
                     </div>
+
+                    {/* Status + Regions */}
+                    <UserStatusRegionsRow uid={u.uid} currentRole={u.role} onUpdated={loadUsers} />
                   </div>
                 ))}
               </div>

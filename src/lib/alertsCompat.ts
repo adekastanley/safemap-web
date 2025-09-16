@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 
 export type AlertType = 'test' | 'type1' | 'type2';
+export type AlertStatus = 'active' | 'resolved' | 'false';
 
 export type AlertDoc = {
   id: string;
@@ -24,10 +25,18 @@ export type AlertDoc = {
   description: string;
   latitude: number;
   longitude: number;
+  locationName?: string | null; // human-readable area/locality
+  locationState?: string | null; // state/region
+  locationCountry?: string | null; // country
   createdAt: Timestamp | null;
   expiresAt?: Timestamp | null;
   upvotes?: number;
   downvotes?: number;
+  status?: AlertStatus;
+  resolvedAt?: Timestamp | null;
+  resolvedBy?: string | null;
+  falseFlaggedAt?: Timestamp | null;
+  falseFlaggedBy?: string | null;
 };
 
 const ALERTS = 'alerts';
@@ -38,9 +47,12 @@ export async function createAlert(params: {
   description: string;
   latitude: number;
   longitude: number;
+  locationName?: string;
+  locationState?: string;
+  locationCountry?: string;
   ttlMinutes?: number;
 }) {
-  const { type, title, description, latitude, longitude, ttlMinutes = 120 } = params;
+  const { type, title, description, latitude, longitude, ttlMinutes = 15 } = params;
 
   const createdAt = serverTimestamp();
   const expiresAt = ttlMinutes > 0 ? Timestamp.fromMillis(Date.now() + ttlMinutes * 60 * 1000) : null;
@@ -52,10 +64,18 @@ export async function createAlert(params: {
     description,
     latitude,
     longitude,
+    locationName: params.locationName || null,
+    locationState: params.locationState || null,
+    locationCountry: params.locationCountry || null,
     createdAt,
     expiresAt,
     upvotes: 0,
     downvotes: 0,
+    status: 'active' as const,
+    resolvedAt: null,
+    resolvedBy: null,
+    falseFlaggedAt: null,
+    falseFlaggedBy: null,
   });
 
   return ref.id;
@@ -116,6 +136,25 @@ export async function voteOnAlert(alertId: string, type: 'up' | 'down') {
   await updateDoc(alertRef, {
     upvotes: type === 'up' ? increment(1) : increment(0),
     downvotes: type === 'down' ? increment(1) : increment(0),
+  });
+}
+
+// Admin actions for web
+export async function resolveAlert(alertId: string) {
+  const alertRef = doc(db, ALERTS, alertId);
+  await updateDoc(alertRef, {
+    status: 'resolved',
+    resolvedAt: serverTimestamp(),
+    resolvedBy: auth.currentUser?.uid ?? null,
+  });
+}
+
+export async function markAlertFalse(alertId: string) {
+  const alertRef = doc(db, ALERTS, alertId);
+  await updateDoc(alertRef, {
+    status: 'false',
+    falseFlaggedAt: serverTimestamp(),
+    falseFlaggedBy: auth.currentUser?.uid ?? null,
   });
 }
 

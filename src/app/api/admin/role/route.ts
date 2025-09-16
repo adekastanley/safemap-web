@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 // POST /api/admin/role
 // Body: { targetUid: string, role: 'admin' | 'user' }
@@ -29,17 +27,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     }
 
-    // Do not allow setting superadmin via API
-    const userRef = doc(db, 'users', targetUid);
-    const snap = await getDoc(userRef);
-    if (!snap.exists()) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    // Use Firestore REST PATCH with the caller's ID token for security and to avoid Admin SDK
+    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    if (!projectId) {
+      return NextResponse.json({ error: 'Server not configured: missing projectId' }, { status: 500 });
     }
 
-    await updateDoc(userRef, {
-      role,
-      updatedAt: new Date().toISOString(),
+    const url = new URL(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${encodeURIComponent(targetUid)}`);
+    url.searchParams.append('updateMask.fieldPaths', 'role');
+    url.searchParams.append('updateMask.fieldPaths', 'updatedAt');
+
+    const resp = await fetch(url.toString(), {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fields: {
+          role: { stringValue: role },
+          updatedAt: { stringValue: new Date().toISOString() }
+        }
+      })
     });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      console.error('Firestore REST error:', err);
+      return NextResponse.json({ error: 'Failed to update user role' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

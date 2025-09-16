@@ -71,6 +71,32 @@ export default function CreateAlertPage() {
     setSelectedLocation(location);
   };
 
+  const reverseGeocode = async (lat: number, lng: number): Promise<{ formatted?: string; name?: string; state?: string; country?: string } | null> => {
+    try {
+      if (!(window as any).google || !(window as any).google.maps) return null;
+      const geocoder = new (window as any).google.maps.Geocoder();
+      const result = await new Promise<any>((resolve) => {
+        geocoder.geocode({ location: { lat, lng } }, (results: any, status: any) => {
+          if (status === 'OK' && results && results.length > 0) {
+            resolve(results[0]);
+          } else {
+            resolve(null);
+          }
+        });
+      });
+      if (!result) return null;
+      const formatted = result.formatted_address as string | undefined;
+      const comps: any[] = result.address_components || [];
+      const findComp = (type: string) => comps.find(c=> (c.types||[]).includes(type));
+      const country = findComp('country')?.long_name as string | undefined;
+      const state = findComp('administrative_area_level_1')?.long_name as string | undefined;
+      const name = (findComp('locality')?.long_name || findComp('sublocality')?.long_name || findComp('administrative_area_level_2')?.long_name) as string | undefined;
+      return { formatted, name, state, country };
+    } catch {
+      return null;
+    }
+  };
+
   const onSubmit = async (data: CreateAlertFormData) => {
     if (!selectedLocation) {
       setError('Please select a location on the map');
@@ -86,12 +112,16 @@ export default function CreateAlertPage() {
     setError('');
 
     try {
+      const geodata = await reverseGeocode(selectedLocation.latitude, selectedLocation.longitude);
       await createMobileAlert({
         type: data.type as AlertType,
         title: data.title,
         description: data.description,
         latitude: selectedLocation.latitude,
         longitude: selectedLocation.longitude,
+        locationName: geodata?.name || geodata?.formatted || undefined,
+        locationState: geodata?.state || undefined,
+        locationCountry: geodata?.country || undefined,
         ttlMinutes: data.ttlMinutes,
       });
       setSuccess(true);

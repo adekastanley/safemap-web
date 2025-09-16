@@ -40,12 +40,14 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
-    // Alerts collection
+    // Alerts collection (community alerts)
     match /alerts/{docId} {
       // Public read
       allow read: if true;
-      // Create/Update/Delete only for admin or superadmin
-      allow create, update, delete: if isAdminByRole() || isSuperAdmin();
+      // Anyone signed in can create an alert
+      allow create: if isSignedIn();
+      // Updates/deletes only by admin/superadmin or the alert creator
+      allow update, delete: if isAdminByRole() || isSuperAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     // Registered phone numbers
